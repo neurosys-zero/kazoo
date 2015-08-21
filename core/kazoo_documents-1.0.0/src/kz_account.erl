@@ -31,6 +31,8 @@
          ,trial_has_expired/1, trial_has_expired/2
          ,is_expired/1
          ,is_trial_account/1
+
+         ,dial_plan/1, dial_plan/2
         ]).
 
 -define(ID, <<"_id">>).
@@ -47,6 +49,7 @@
 -define(NOTIFY_PREF, <<"pvt_notification_preference">>).
 -define(KEY_TRIAL_EXPIRATION, <<"pvt_trial_expires">>).
 -define(KEY_TRIAL_ACCOUNT, <<"is_trial_account">>).
+-define(KEY_DIAL_PLAN, <<"dial_plan">>).
 
 -define(PVT_TYPE, <<"account">>).
 
@@ -404,3 +407,10 @@ is_trial_account(JObj) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+-spec dial_plan(doc()) -> api_object().
+-spec dial_plan(doc(), Default) -> wh_json:object() | Default.
+dial_plan(JObj) ->
+    dial_plan(JObj, 'undefined').
+dial_plan(JObj, Default) ->
+    wh_json:get_json_value(?KEY_DIAL_PLAN, JObj, Default).
