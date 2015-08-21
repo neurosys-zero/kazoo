@@ -75,8 +75,8 @@
 -export([max_bulk_insert/0]).
 
 -include_lib("wh_couch.hrl").
--include_lib("whistle_number_manager/include/wh_number_manager.hrl").
 -include_lib("whistle/include/wapi_conf.hrl").
+-include_lib("kazoo_number_manager/include/knm_phone_number.hrl").
 
 %% Throttle how many docs we bulk insert to BigCouch
 -define(MAX_BULK_INSERT, 2000).
@@ -132,7 +132,7 @@ db_classification(?KZ_ACDC_DB) -> 'aggregate';
 db_classification(?WH_SERVICES_DB) -> 'aggregate';
 db_classification(?KZ_PORT_REQUESTS_DB) -> 'aggregate';
 db_classification(?KZ_WEBHOOKS_DB) -> 'aggregate';
-db_classification(<<?WNM_DB_PREFIX_L, _Prefix:5/binary>>) -> 'numbers';
+db_classification(<<?KNM_DB_PREFIX_L, _Prefix:5/binary>>) -> 'numbers';
 db_classification(<<"numbers%2F", _Prefix:5/binary>>) -> 'numbers';
 db_classification(<<"numbers%2f", _Prefix:5/binary>>) -> 'numbers';
 db_classification(?MATCH_MODB_SUFFIX_UNENCODED(_A,_B,_Rest,_Year,_Month)) -> 'modb';% these only need to match
