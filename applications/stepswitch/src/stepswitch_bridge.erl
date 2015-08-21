@@ -28,7 +28,7 @@
         ]).
 
 -include("stepswitch.hrl").
--include_lib("whistle_number_manager/include/wh_number_manager.hrl").
+-include_lib("whistle/src/wh_json.hrl").
 
 -record(state, {endpoints = [] :: wh_json:objects()
                 ,resource_req :: wapi_offnet_resource:req()
@@ -44,6 +44,8 @@
 -define(QUEUE_NAME, <<>>).
 -define(QUEUE_OPTIONS, []).
 -define(CONSUME_OPTIONS, []).
+
+-define(WNM_PHONE_NUMBER_DOC, <<"phone_numbers">>).
 
 %%%===================================================================
 %%% API
