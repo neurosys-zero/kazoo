@@ -965,7 +965,8 @@ strip_right_binary(<<C, B/binary>>, C) ->
         <<>> -> <<>>;
         T -> <<C, T/binary>>
     end;
-strip_right_binary(<<A, B/binary>>, C) -> <<A, (strip_right_binary(B, C))/binary>>;
+strip_right_binary(<<A, B/binary>>, C) ->
+    <<A, (strip_right_binary(B, C))/binary>>;
 strip_right_binary(<<>>, _) -> <<>>.
 
 -spec suffix_binary(binary(), binary()) -> boolean().
