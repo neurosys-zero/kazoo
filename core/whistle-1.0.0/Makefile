@@ -11,6 +11,7 @@ ELIBS = $(ERL_LIBS):$(subst $(eval) ,:,$(wildcard $(ROOT)/deps/rabbitmq_client-*
 
 TEST_EBINS = $(shell find $(ROOT)/deps/mochiweb-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/core/kazoo_web* -maxdepth 2 -name ebin -print) \
+	$(shell find $(ROOT)/deps/cowlib-* -maxdepth 2 -name ebin -print) \
 	$(shell find $(ROOT)/deps/ejson-* -maxdepth 2 -name ebin -print)
 TEST_PA = $(foreach EBIN,$(TEST_EBINS),-pa $(EBIN))
 
