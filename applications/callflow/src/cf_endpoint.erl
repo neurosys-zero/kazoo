@@ -149,9 +149,7 @@ maybe_cached_hotdesk_ids(Props, JObj, AccountDb) ->
     case wh_json:get_keys([<<"hotdesk">>, <<"users">>], JObj) of
         [] -> Props;
         OwnerIds ->
-            lists:foldl(fun(Id, P) ->
-                                [{'db', AccountDb, Id}|P]
-                        end, Props, OwnerIds)
+            [{'db', AccountDb, Id} || Id <- OwnerIds] ++ Props
     end.
 
 -spec merge_attributes(wh_json:object(), ne_binary()) -> wh_json:object().
