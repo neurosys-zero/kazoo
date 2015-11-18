@@ -3,8 +3,6 @@
 -module(poolboy).
 -behaviour(gen_server).
 
--include_lib("whistle/include/otp_compatibility.hrl").
-
 -export([checkout/1, checkout/2, checkout/3, checkin/2, transaction/2,
          transaction/3, child_spec/2, child_spec/3, start/1, start/2,
          start_link/1, start_link/2, stop/1, status/1]).
@@ -15,8 +13,8 @@
 
 -record(state, {
     supervisor :: pid(),
-    workers :: queue(),
-    waiting :: queue(),
+    workers :: queue:queue(),
+    waiting :: queue:queue(),
     monitors :: ets:tid(),
     size = 5 :: non_neg_integer(),
     overflow = 0 :: non_neg_integer(),
@@ -51,7 +49,7 @@ checkin(Pool, Worker) when is_pid(Worker) ->
 transaction(Pool, Fun) ->
     transaction(Pool, Fun, ?TIMEOUT).
 
--spec transaction(Pool :: node(), Fun :: fun((Worker :: pid()) -> any()), 
+-spec transaction(Pool :: node(), Fun :: fun((Worker :: pid()) -> any()),
     Timeout :: timeout()) -> any().
 transaction(Pool, Fun, Timeout) ->
     Worker = poolboy:checkout(Pool, true, Timeout),

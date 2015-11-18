@@ -21,8 +21,6 @@
 -module(meck).
 -behaviour(gen_server).
 
--include_lib("whistle/include/otp_compatibility.hrl").
-
 %% Interface exports
 -export([new/1]).
 -export([new/2]).
@@ -71,7 +69,7 @@
 
 %% Records
 -record(state, {mod :: atom(),
-                expects :: dict(),
+                expects :: dict:dict(),
                 valid = true :: boolean(),
                 history = [] :: history(),
                 original :: term(),
@@ -271,7 +269,7 @@ history(Mod) when is_atom(Mod) -> call(Mod, history).
 %% @see num_calls/3
 %% @see num_calls/4
 -spec history(Mod::atom(), Pid:: pid() | '_') -> history().
-history(Mod, Pid) when is_atom(Mod), is_pid(Pid) orelse Pid == '_' -> 
+history(Mod, Pid) when is_atom(Mod), is_pid(Pid) orelse Pid == '_' ->
     match_history(match_mfa('_', Pid), call(Mod, history)).
 
 %% @spec unload() -> list(atom())
