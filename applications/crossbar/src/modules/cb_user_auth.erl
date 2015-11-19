@@ -17,6 +17,7 @@
          ,validate/1, validate/2
          ,put/1, put/2
          ,post/2
+         ,cleanup_reset_ids/0
         ]).
 
 -include("../crossbar.hrl").
@@ -24,6 +25,7 @@
 -define(ACCT_MD5_LIST, <<"users/creds_by_md5">>).
 -define(ACCT_SHA1_LIST, <<"users/creds_by_sha">>).
 -define(LIST_BY_RESET_ID, <<"users/list_by_reset_id">>).
+-define(LIST_BY_MTIME, <<"users/list_by_mtime">>).
 -define(DEFAULT_LANGUAGE, <<"en-us">>).
 -define(USER_AUTH_TOKENS, whapps_config:get_integer(?CONFIG_CAT, <<"user_auth_tokens">>, 35)).
 
@@ -36,6 +38,8 @@
 %%%===================================================================
 init() ->
     couch_mgr:db_create(?KZ_TOKEN_DB),
+    _ = crossbar_bindings:bind(crossbar_cleanup:binding_day(), ?MODULE, 'cleanup_reset_ids'),
+
     _ = crossbar_bindings:bind(<<"*.authenticate">>, ?MODULE, 'authenticate'),
     _ = crossbar_bindings:bind(<<"*.authorize">>, ?MODULE, 'authorize'),
     _ = crossbar_bindings:bind(<<"*.allowed_methods.user_auth">>, ?MODULE, 'allowed_methods'),
@@ -184,7 +188,8 @@ create_auth_resp(Context, Token, AccountId, AccountId) ->
       ,cb_context:set_auth_token(Context, Token)
      );
 create_auth_resp(Context, _AccountId, _Token, _AuthAccountId) ->
-    lager:debug("forbidding token for account ~s and auth account ~s", [_AccountId, _AuthAccountId]),
+    lager:debug("forbidding token for account ~s and auth account ~s"
+                ,[_AccountId, _AuthAccountId]),
     cb_context:add_system_error('forbidden', Context).
 
 %%--------------------------------------------------------------------
@@ -241,7 +246,8 @@ maybe_authenticate_user(Context, Credentials, <<"md5">>, <<_/binary>> = Account)
     case cb_context:resp_status(Context1) of
         'success' -> load_md5_results(Context1, cb_context:doc(Context1));
         _Status ->
-            lager:debug("credentials do not belong to any user: ~s: ~p", [_Status, cb_context:doc(Context1)]),
+            lager:debug("credentials do not belong to any user: ~s: ~p"
+                        ,[_Status, cb_context:doc(Context1)]),
             cb_context:add_system_error('invalid_credentials', Context1)
     end;
 maybe_authenticate_user(Context, Credentials, <<"sha">>, <<_/binary>> = Account) ->
@@ -334,6 +340,36 @@ load_md5_results(Context, []) ->
 load_md5_results(Context, JObj) ->
     lager:debug("found MD5 credentials belong to user ~s", [wh_doc:id(JObj)]),
     cb_context:set_doc(Context, wh_json:get_value(<<"value">>, JObj)).
+
+
+%% @public
+-spec cleanup_reset_ids() -> 'ok'.
+cleanup_reset_ids() ->
+    CreatedBefore = wh_util:current_tstamp() - 2 * ?SECONDS_IN_DAY,
+    ViewOptions = [{'startkey', 0}
+                   ,{'endkey', CreatedBefore}
+                   %% TODO: find a limit that matches the number of pwd resets per day
+                   ,{'limit', couch_util:max_bulk_insert()}
+                   ,'include_docs'
+                  ],
+    case couch_mgr:get_results(?WH_ACCOUNTS_DB, ?LIST_BY_MTIME, ViewOptions) of
+        {'error', _E} ->
+            lager:debug("failed to lookup expired reset_ids: ~p", [_E]);
+        {'ok', []} ->
+            lager:debug("no expired reset_ids found");
+        {'ok', UserDocs} ->
+            lager:debug("checking ~b user documents", [length(UserDocs)]),
+            couch_mgr:suppress_change_notice(),
+            ensure_reset_id_deleted(UserDocs),
+            couch_mgr:enable_change_notice(),
+            lager:debug("removed yesterday's expired reset_ids")
+    end.
+
+ensure_reset_id_deleted([Doc|Docs]) ->
+    {'ok', _} = couch_mgr:save_doc(wh_doc:account_db(Doc)
+                                  ,wh_json:delete_key(?RESET_ID, Doc)),
+    ensure_reset_id_deleted(Docs);
+ensure_reset_id_deleted([]) -> 'ok'.
 
 
 %% @private
@@ -457,7 +493,7 @@ reset_id(?MATCH_ACCOUNT_ENCODED(A,B,Rest)) ->
     <<(?MATCH_ACCOUNT_RAW(A,B,Rest))/binary, Noise/binary>>;
 reset_id(<<ResetId:?RESET_ID_SIZE/binary>>) ->
     <<Account:32/binary, _Noise/binary>> = ResetId,
-    wh_util:format_account_db(wh_util:to_lower(Account)).
+    wh_util:format_account_db(wh_util:to_lower_binary(Account)).
 
 %% @private
 -spec reset_link(wh_json:object(), ne_binary()) -> ne_binary().
