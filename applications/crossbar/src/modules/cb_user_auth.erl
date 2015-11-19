@@ -29,7 +29,7 @@
 
 -define(RECOVERY, <<"recovery">>).
 -define(RESET_ID, <<"reset_id">>).
--define(RESET_ID_SIZE, 40).
+-define(RESET_ID_SIZE, 256).
 
 %%%===================================================================
 %%% API
@@ -457,7 +457,7 @@ reset_id(?MATCH_ACCOUNT_ENCODED(A,B,Rest)) ->
     <<(?MATCH_ACCOUNT_RAW(A,B,Rest))/binary, Noise/binary>>;
 reset_id(<<ResetId:?RESET_ID_SIZE/binary>>) ->
     <<Account:32/binary, _Noise/binary>> = ResetId,
-    wh_util:format_account_id(Account, 'encoded').
+    wh_util:format_account_db(wh_util:to_lower(Account)).
 
 %% @private
 -spec reset_link(wh_json:object(), ne_binary()) -> ne_binary().
