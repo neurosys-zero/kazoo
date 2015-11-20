@@ -365,6 +365,7 @@ cleanup_reset_ids() ->
             lager:debug("removed yesterday's expired reset_ids")
     end.
 
+-spec ensure_reset_id_deleted(wh_json:objects()) -> 'ok'.
 ensure_reset_id_deleted([Doc|Docs]) ->
     {'ok', _} = couch_mgr:save_doc(wh_doc:account_db(Doc)
                                   ,wh_json:delete_key(?RESET_ID, Doc)),
