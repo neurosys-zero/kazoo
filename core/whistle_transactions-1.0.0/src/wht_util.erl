@@ -33,7 +33,7 @@
          ,rollup/2
         ]).
 
--include("../include/whistle_transactions.hrl").
+-include("include/whistle_transactions.hrl").
 
 %% tracked in hundred-ths of a cent
 -define(DOLLAR_TO_UNIT, 10000).
@@ -57,6 +57,11 @@
                   ,{<<"unknown">>, ?CODE_UNKNOWN}
                  ]).
 
+-spec reasons() -> wh_proplist().
+-spec reasons(integer()) -> wh_proplist().
+-spec reasons(integer(), integer()) -> wh_proplist().
+-spec reasons(integer(), integer(), wh_proplist(), wh_proplist()) ->
+                     ne_binaries().
 reasons() ->
     ?REASONS.
 reasons(Min) ->
@@ -76,7 +81,7 @@ reasons(Min, Max, [_ | T], Acc) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec dollars_to_units(text() | number()) -> integer().
+-spec dollars_to_units(text() | dollars()) -> units().
 dollars_to_units(Dollars) when is_number(Dollars) ->
     round(Dollars * ?DOLLAR_TO_UNIT);
 dollars_to_units(Dollars) ->
@@ -88,17 +93,16 @@ dollars_to_units(Dollars) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec units_to_dollars(number()) -> float().
+-spec units_to_dollars(units()) -> dollars().
 units_to_dollars(Units) when is_number(Units) ->
     trunc(Units) / ?DOLLAR_TO_UNIT;
 units_to_dollars(Units) ->
     units_to_dollars(wh_util:to_integer(Units)).
 
 %% @public
--spec pretty_print_dollars(float()) -> ne_binary().
+-spec pretty_print_dollars(dollars()) -> ne_binary().
 pretty_print_dollars(Amount) ->
     wh_util:to_binary(io_lib:format("$~.2f", [Amount])).
-
 
 %%--------------------------------------------------------------------
 %% @public
@@ -107,9 +111,10 @@ pretty_print_dollars(Amount) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec base_call_cost(integer(), integer(), integer()) -> integer().
-base_call_cost(RateCost, RateMin, RateSurcharge) when is_integer(RateCost),
-                                                      is_integer(RateMin),
-                                                      is_integer(RateSurcharge) ->
+base_call_cost(RateCost, RateMin, RateSurcharge)
+  when is_integer(RateCost),
+       is_integer(RateMin),
+       is_integer(RateSurcharge) ->
     RateCost * ( RateMin div 60 ) + RateSurcharge.
 
 %%--------------------------------------------------------------------
@@ -118,14 +123,14 @@ base_call_cost(RateCost, RateMin, RateSurcharge) when is_integer(RateCost),
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec current_balance(ne_binary()) -> integer().
+-spec current_balance(ne_binary()) -> units().
 current_balance(Account) -> get_balance(Account, []).
 
--spec previous_balance(ne_binary(), ne_binary(), ne_binary()) -> integer().
+-spec previous_balance(ne_binary(), ne_binary(), ne_binary()) -> units().
 previous_balance(Account, Year, Month) ->
     get_balance(Account, [{'year', Year}, {'month', Month}]).
 
--spec get_balance(ne_binary(), wh_proplist()) -> integer().
+-spec get_balance(ne_binary(), couch_util:view_options()) -> units().
 get_balance(Account, ViewOptions) ->
     View = <<"transactions/credit_remaining">>,
     case kazoo_modb:get_results(Account, View, ViewOptions) of
@@ -138,8 +143,8 @@ get_balance(Account, ViewOptions) ->
             0
     end.
 
--spec get_balance_from_previous(ne_binary(), wh_proplist()) -> integer().
--spec get_balance_from_previous(ne_binary(), wh_proplist(), integer()) -> integer().
+-spec get_balance_from_previous(ne_binary(), wh_proplist()) -> units().
+-spec get_balance_from_previous(ne_binary(), wh_proplist(), integer()) -> units().
 get_balance_from_previous(Account, ViewOptions) ->
     Retry = props:get_value('retry', ViewOptions, 3),
     get_balance_from_previous(Account, ViewOptions, Retry).
@@ -157,10 +162,10 @@ get_balance_from_previous(Account, ViewOptions, Retry) when Retry >= 0 ->
     lager:warning("could not find current balance trying previous month: ~p", [VOptions]),
     get_balance(Account, VOptions);
 get_balance_from_previous(Account, ViewOptions, _) ->
-    lager:warning("3 attempt to find balance in previous modb getting from account", []),
+    lager:warning("3rd attempt to find balance in previous modb getting from account"),
     get_balance_from_account(Account, ViewOptions).
 
--spec maybe_rollup(ne_binary(), wh_proplist(), integer()) -> integer().
+-spec maybe_rollup(ne_binary(), wh_proplist(), units()) -> units().
 maybe_rollup(Account, ViewOptions, Balance) ->
     case props:get_integer_value('retry', ViewOptions) of
         'undefined' when Balance =< 0 ->
@@ -177,7 +182,7 @@ maybe_rollup(Account, ViewOptions, Balance) ->
             maybe_rollup_previous_month(Account, Balance)
     end.
 
--spec verify_monthly_rollup_exists(ne_binary(), integer()) -> integer().
+-spec verify_monthly_rollup_exists(ne_binary(), units()) -> units().
 verify_monthly_rollup_exists(Account, Balance) ->
     case kazoo_modb:open_doc(Account, <<"monthly_rollup">>) of
         {'ok', _} -> Balance;
@@ -188,7 +193,7 @@ verify_monthly_rollup_exists(Account, Balance) ->
         {'error', _R} -> Balance
     end.
 
--spec maybe_rollup_previous_month(ne_binary(), integer()) -> integer().
+-spec maybe_rollup_previous_month(ne_binary(), units()) -> units().
 maybe_rollup_previous_month(Account, Balance) ->
     case get_rollup_from_previous(Account) of
         {'error', _} -> Balance;
@@ -198,7 +203,7 @@ maybe_rollup_previous_month(Account, Balance) ->
     end.
 
 -spec get_rollup_from_previous(ne_binary()) ->
-                                      {'ok', integer()} |
+                                      {'ok', units()} |
                                       {'error', any()}.
 get_rollup_from_previous(Account) ->
     {Y, M, _} = erlang:date(),
@@ -221,8 +226,8 @@ get_rollup_from_previous(Account) ->
             E
     end.
 
--spec get_rollup_balance(ne_binary(), wh_proplist()) ->
-                                {'ok', integer()} |
+-spec get_rollup_balance(ne_binary(), couch_util:view_options()) ->
+                                {'ok', units()} |
                                 {'error', any()}.
 get_rollup_balance(Account, ViewOptions) ->
     View = <<"transactions/credit_remaining">>,
@@ -243,7 +248,7 @@ get_rollup_balance(Account, ViewOptions) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec current_account_dollars(ne_binary()) -> float().
+-spec current_account_dollars(ne_binary()) -> dollars().
 current_account_dollars(Account) ->
     Units = ?MODULE:current_balance(Account),
     ?MODULE:units_to_dollars(Units).
@@ -254,7 +259,7 @@ current_account_dollars(Account) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_balance_from_account(ne_binary(), wh_proplist()) -> integer().
+-spec get_balance_from_account(ne_binary(), couch_util:view_options()) -> units().
 get_balance_from_account(Account, ViewOptions) ->
     View = <<"transactions/credit_remaining">>,
     AccountId = wh_util:format_account_id(Account, 'raw'),
@@ -276,11 +281,14 @@ get_balance_from_account(Account, ViewOptions) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec call_cost(wh_json:object()) -> integer().
+-spec call_cost(wh_json:object()) -> units().
 call_cost(JObj) ->
     CCVs = wh_json:get_first_defined([<<"Custom-Channel-Vars">>
                                       ,<<"custom_channel_vars">>
-                                     ], JObj, JObj),
+                                     ]
+                                     ,JObj
+                                     ,JObj
+                                    ),
     RateNoChargeTime = get_integer_value(<<"Rate-NoCharge-Time">>, CCVs),
     BillingSecs = get_integer_value(<<"Billing-Seconds">>, JObj)
         - get_integer_value(<<"Billing-Seconds-Offset">>, CCVs),
@@ -290,7 +298,7 @@ call_cost(JObj) ->
     case BillingSecs =< 0 of
         'true' -> 0;
         'false' when BillingSecs =< RateNoChargeTime ->
-            lager:info("billing seconds less then ~ps, no charge",[RateNoChargeTime]),
+            lager:info("billing seconds less then ~ps, no charge", [RateNoChargeTime]),
             0;
         'false' ->
             Rate = get_integer_value(<<"Rate">>, CCVs),
@@ -355,7 +363,7 @@ per_minute_cost(JObj) ->
 %% Secs :: billable seconds
 %% @end
 %%--------------------------------------------------------------------
--spec calculate_cost(integer(), integer(), integer(), integer(), integer()) -> integer().
+-spec calculate_cost(units(), integer(), integer(), units(), integer()) -> units().
 calculate_cost(_, _, _, _, 0) -> 0;
 calculate_cost(R, 0, RM, Sur, Secs) ->
     calculate_cost(R, 60, RM, Sur, Secs);
@@ -519,7 +527,8 @@ collapse_call_transaction(CallId, JObj, Calls) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec collapse_created_time(wh_json:object(), wh_json:object()) -> wh_json:object().
+-spec collapse_created_time(wh_json:object(), wh_json:object()) ->
+                                   wh_json:object().
 collapse_created_time(Call, JObj) ->
     CurrentCreated = wh_json:get_integer_value(<<"created">>, Call, 0),
     MaybeCreated = wh_json:get_integer_value(<<"created">>, JObj, 0),
@@ -534,7 +543,8 @@ collapse_created_time(Call, JObj) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec collapse_ended_time(wh_json:object(), wh_json:object()) -> wh_json:object().
+-spec collapse_ended_time(wh_json:object(), wh_json:object()) ->
+                                 wh_json:object().
 collapse_ended_time(Call, JObj) ->
     CurrentEnd = wh_json:get_integer_value(<<"ended">>, Call, 0),
     MaybeEnd = wh_json:get_integer_value(<<"created">>, JObj, 0),
@@ -549,7 +559,8 @@ collapse_ended_time(Call, JObj) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec collapse_amount(wh_json:object(), wh_json:object()) -> wh_json:object().
+-spec collapse_amount(wh_json:object(), wh_json:object()) ->
+                             wh_json:object().
 collapse_amount(Call, JObj) ->
     CurrentAmount = wh_json:get_value(<<"amount">>, Call, 0),
     MaybeAmount = get_amount(JObj),
@@ -562,7 +573,8 @@ collapse_amount(Call, JObj) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec collapse_metadata(wh_json:object(), wh_json:object()) -> wh_json:object().
+-spec collapse_metadata(wh_json:object(), wh_json:object()) ->
+                               wh_json:object().
 collapse_metadata(Call, JObj) ->
     case wh_json:get_value(<<"metadata">>, Call) of
         'undefined' ->
@@ -579,7 +591,7 @@ collapse_metadata(Call, JObj) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec get_amount(wh_json:object()) -> float().
+-spec get_amount(wh_json:object()) -> dollars().
 get_amount(Call) ->
     Amount = wh_json:get_value(<<"amount">>, Call, 0),
     Type = wh_json:get_value(<<"type">>, Call),
@@ -594,8 +606,10 @@ get_amount(Call) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
--spec clean_transactions(wh_json:objects()) -> wh_json:objects().
--spec clean_transactions(wh_json:objects(), wh_json:objects()) -> wh_json:objects().
+-spec clean_transactions(wh_json:objects()) ->
+                                wh_json:objects().
+-spec clean_transactions(wh_json:objects(), wh_json:objects()) ->
+                                wh_json:objects().
 clean_transactions(Transactions) ->
     clean_transactions(Transactions, []).
 
@@ -619,10 +633,10 @@ clean_transactions([Transaction|Transactions], Acc) ->
 %%--------------------------------------------------------------------
 -spec clean_transaction(wh_json:object()) -> wh_json:object().
 clean_transaction(Transaction) ->
-    Routines = [fun(T) -> clean_amount(T) end
-                ,fun(T) -> clean_version(T) end
-                ,fun(T) -> clean_event(T) end
-                ,fun(T) -> clean_id(T) end
+    Routines = [fun clean_amount/1
+                ,fun clean_version/1
+                ,fun clean_event/1
+                ,fun clean_id/1
                ],
     lists:foldl(fun(F, T) -> F(T) end, Transaction, Routines).
 
@@ -640,7 +654,8 @@ clean_amount(Transaction) ->
             wh_json:set_values([{<<"type">>, <<"debit">>}
                                 ,{<<"amount">>, Amount*-1}
                                ]
-                               ,Transaction);
+                               ,Transaction
+                              );
         'false' ->
             wh_json:set_value(<<"type">>, <<"credit">>, Transaction)
     end.
