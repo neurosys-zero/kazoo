@@ -367,8 +367,13 @@ cleanup_reset_ids() ->
 
 -spec ensure_reset_id_deleted(wh_json:objects()) -> 'ok'.
 ensure_reset_id_deleted([Doc|Docs]) ->
-    {'ok', _} = couch_mgr:save_doc(wh_doc:account_db(Doc)
-                                  ,wh_json:delete_key(?RESET_ID, Doc)),
+    {'ok', _} =
+        case wh_json:get_ne_binary_value(?RESET_ID, Doc) of
+            'undefined' -> {'ok', 'undefined'};
+            _Defined ->
+                couch_mgr:save_doc(wh_doc:account_db(Doc)
+                                   ,wh_json:delete_key(?RESET_ID, Doc))
+        end,
     ensure_reset_id_deleted(Docs);
 ensure_reset_id_deleted([]) -> 'ok'.
 
