@@ -1431,17 +1431,6 @@ start_record_call_args(Node, UUID, JObj, RecordingName) ->
                                        ,{<<"Record-Min-Sec">>, RecordMinSec}
                                        ,{<<"record_sample_rate">>, wh_util:to_binary(SampleRate)}
                                       ]),
-    _ = ecallmgr_util:export(
-          Node
-          ,UUID
-          ,[{<<"Insert-At">>, wh_json:get_value(<<"Insert-At">>, JObj)}
-            ,{<<"Time-Limit">>, wh_json:get_value(<<"Time-Limit">>, JObj)}
-            ,{<<"Media-Name">>, wh_json:get_value(<<"Media-Name">>, JObj)}
-            ,{<<"Media-Transfer-Method">>, wh_json:get_value(<<"Media-Transfer-Method">>, JObj)}
-            ,{<<"Media-Transfer-Destination">>, wh_json:get_value(<<"Media-Transfer-Destination">>, JObj)}
-            ,{<<"Additional-Headers">>, wh_json:get_value(<<"Additional-Headers">>, JObj)}
-           ]),
-
     list_to_binary([UUID, <<" start ">>
                     ,RecordingName, <<" ">>
                     ,wh_json:get_string_value(<<"Time-Limit">>, JObj, "3600") % one hour

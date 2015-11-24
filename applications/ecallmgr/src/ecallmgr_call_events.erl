@@ -369,7 +369,6 @@ handle_info({'event', [CallId | Props]}, #state{node=Node
             process_channel_event(Props),
             {'noreply', State};
         {_A, _B} ->
-            lager:debug("processing ~s/~s", [_A, _B]),
             process_channel_event(Props),
             {'noreply', State}
     end;
@@ -566,12 +565,8 @@ process_channel_event(Props) ->
     EventName = get_event_name(Props),
     ApplicationName = get_application_name(Props),
     Masqueraded = is_masquerade(Props),
-    case should_publish(EventName, ApplicationName, Masqueraded) of
-        'false' ->
-            Action = props:get_value(<<"Action">>, Props),
-            lager:debug("not publishing ~s(~s): ~s"
-                        ,[EventName, ApplicationName, Action]
-                       );
+    case should_publish(EventName, ApplicationName, Masqueraded, Props) of
+        'false' -> 'ok';
         'true' ->
             Event = create_event(EventName, ApplicationName, Props),
             publish_event(Event)
@@ -609,7 +604,7 @@ generic_call_event_props(Props) ->
      ,{<<"Disposition">>, get_disposition(Props)}
      ,{<<"Raw-Application-Name">>, get_raw_application_name(Props)}
      ,{<<"Channel-Moving">>, get_channel_moving(Props)}
-     ,{<<"Call-Direction">>, props:get_value(<<"Call-Direction">>, Props)}
+     ,{<<"Call-Direction">>, get_direction(Props)}
      ,{<<"Caller-ID-Number">>, props:get_first_defined([<<"variable_effective_caller_id_number">>
                                                         ,<<"Caller-Caller-ID-Number">>
                                                        ], Props)}
@@ -637,6 +632,10 @@ generic_call_event_props(Props) ->
      ,{<<"To-Tag">>, props:get_value(<<"variable_sip_to_tag">>, Props)}
      ,{<<"Switch-URL">>, props:get_value(<<"Switch-URL">>, Props)}
      ,{<<"Switch-URI">>, props:get_value(<<"Switch-URI">>, Props)}
+     ,{<<"Switch-Node">>, props:get_value(<<"Switch-Node">>, Props)}
+     ,{<<"Channel-State">>, get_channel_state(Props)}
+     ,{<<"Channel-Call-State">>, props:get_value(<<"Channel-Call-State">>, Props)}
+     ,{<<"Channel-Name">>, props:get_value(<<"Channel-Name">>, Props)}
      | wh_api:default_headers(?APP_NAME, ?APP_VERSION)
     ].
 
@@ -845,30 +844,46 @@ fax_specific(Props) ->
        ,{<<"Fax-Doc-DB">>, props:get_value(<<"variable_fax_doc_database">>, Props)}
        ]).
 
--spec should_publish(ne_binary(), ne_binary(), boolean()) -> boolean().
-should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"bridge">>, 'false') ->
+-spec should_publish(ne_binary(), ne_binary(), boolean(), wh_proplist()) -> boolean().
+should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"bridge">>, 'false', _) ->
     lager:debug("suppressing bridge execute complete in favour the whistle masquerade of this event"),
     'false';
-should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"intercept">>, 'false') ->
+should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"set", _/binary>>, _, _) ->
+    'false';
+should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"intercept">>, 'false', _) ->
     lager:debug("suppressing intercept execute complete in favour the whistle masquerade of this event"),
     'false';
-should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"execute_extension">>, 'false') ->
+should_publish(<<"CHANNEL_EXECUTE_COMPLETE">>, <<"execute_extension">>, 'false', _) ->
     lager:debug("suppressing execute_extension execute complete in favour the whistle masquerade of this event"),
     'false';
-should_publish(<<"CHANNEL_EXECUTE", _/binary>>, <<"park">>, _) ->
+should_publish(<<"CHANNEL_EXECUTE", _/binary>>, <<"park">>, _, _) ->
     'false';
-should_publish(<<"CHANNEL_EXECUTE", _/binary>>, Application, _) ->
+should_publish(<<"CHANNEL_EXECUTE", _/binary>>, Application, _, _) ->
     props:get_value(Application, ?FS_APPLICATION_NAMES) =/= 'undefined';
-should_publish(_, <<"transfer">>, _) ->
+should_publish(_, <<"transfer">>, _, _) ->
     'true';
-should_publish(<<"CHANNEL_FAX_STATUS">>, _, _) ->
+should_publish(<<"CHANNEL_FAX_STATUS">>, _, _, _) ->
     'true';
-should_publish(<<"FAX_DETECTED">>, _, _) ->
+should_publish(<<"FAX_DETECTED">>, _, _, _) ->
     'true';
-should_publish(<<"DETECTED_TONE">>, _, _) ->
+should_publish(<<"DETECTED_TONE">>, _, _, _) ->
     'true';
-should_publish(EventName, _A, _) ->
+should_publish(<<"CHANNEL_DESTROY">>, _, _, Props) ->
+    Routines = [fun maybe_skip_loopback/1],
+    lists:all(fun(Fun) -> Fun(Props) end, Routines);
+should_publish(EventName, _A, _, _) ->
     lists:member(EventName, ?CALL_EVENTS).
+
+-spec maybe_skip_loopback(wh_proplist()) -> boolean().
+maybe_skip_loopback(Props) ->
+    ChannelName = props:get_value(<<"Channel-Name">>, Props),
+    CallFwd = props:is_true(?GET_CCV(<<"Call-Forward">>), Props),
+    Cause = get_hangup_cause(Props),
+    maybe_skip_loopback(ChannelName, CallFwd, Cause).
+
+-spec maybe_skip_loopback(ne_binary(), boolean(), ne_binary()) -> boolean().
+maybe_skip_loopback(<<"loopback", _/binary>>, 'true', <<"NORMAL", _/binary>>) -> 'false';
+maybe_skip_loopback(_, _, _) -> 'true'.
 
 -spec silence_terminated(api_integer() | wh_proplist()) -> api_boolean().
 silence_terminated('undefined') -> 'undefined';
@@ -879,6 +894,10 @@ silence_terminated(Prop) when is_list(Prop) ->
         Ex -> wh_util:is_true(Ex)
     end.
 
+-spec get_direction(wh_proplist()) -> api_binary().
+get_direction(Props) ->
+    props:get_first_defined([<<"Caller-Logical-Direction">>, <<"Call-Direction">>], Props).
+
 -spec is_channel_moving(wh_proplist()) -> boolean().
 is_channel_moving(Props) ->
     props:get_is_true(<<"variable_channel_is_moving">>, Props, 'false').
@@ -888,6 +907,14 @@ get_channel_moving(Props) ->
     case is_channel_moving(Props) of
         'false' -> 'undefined';
         'true' -> 'true'
+    end.
+
+-spec get_channel_state(wh_proplist()) -> api_binary().
+get_channel_state(Props) ->
+    case props:get_value(<<"Channel-State">>, Props) of
+        'undefined' -> 'undefined';
+        <<"CS_", ChannelState/binary>> -> ChannelState;
+        Other -> Other
     end.
 
 -spec get_call_id(wh_proplist()) -> api_binary().
