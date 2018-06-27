@@ -12,9 +12,9 @@ Key | Description | Type | Default | Required | Support
 --- | ----------- | ---- | ------- | -------- | --------
 `action` | Action to take for the caller | `string('park', 'retrieve', 'auto')` | `park` | `false` |
 `custom_presence_id` | use configured presence_id and fallback to request | `boolean` | `false` | `false` | 
-`default_callback_timeout` | How long, in seconds, to wait before calling back the parker | `integer` |   | `false` | 
+`default_callback_timeout` | How long, in milliseconds, to ring parker after ringback_timeout | `integer` |   | `false` | 
 `default_presence_type` | Type of presence to update | `string('early', 'terminated', 'confirmed')` |   | `false` | 
-`default_ringback_timeout` | How long, in milliseconds, before ringing back | `integer` |   | `false` | 
+`default_ringback_timeout` | How long, in milliseconds, to keep caller in parking slot before ringing back parker | `integer` |   | `false` | 
 `presence_id` | use this presence_id | `string` |   | `false` | 
 `slot` | Static slot number to use | `string` |   | `false`
 `slots` | Statically define slots and their configuration | `object` | `null` | `false` | 
@@ -36,8 +36,8 @@ You can override the defaults for the entire system or individually configure sl
 
 Key | Description | Type | Default | Required
 --- | ----------- | ---- | ------- | --------
-`ringback_timeout` | When a call is parked and the device parking the call is known then parked call will ring the parker on this period. | `integer` |   | `false`
-`callback_timeout` | When a parked call has remained parked for the `ringback_timeout` duration the parker will be called for this time. | `integer` |   | `false`
+`ringback_timeout` | When a call is parked and the device parking the call is known then parked call will ring the parker on this period (in milliseconds). | `integer` |   | `false`
+`callback_timeout` | When a parked call has remained parked for the `ringback_timeout` duration the parker will be called for this time (in milliseconds). | `integer` |   | `false`
 `presence_id` | This parameter overrides the published presence_id for blf | `string` |   | `false`
 `presence_type` | This parameter overrides the dialog state used for occupied slots. | `string('early', 'terminated', 'confirmed')` |   | `false`
 
